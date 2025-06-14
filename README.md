@@ -1,3 +1,8 @@
+Fork kludged to act as a passthrough cache. Original README follows.
+
+---
+
+
 SQLite FS plugin for Caddy
 ==========================
 

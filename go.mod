@@ -1,4 +1,4 @@
-module github.com/mholt/caddy-sqlite-fs
+module github.com/pushcx/caddy-sqlite-fs
 
 go 1.21.4
 

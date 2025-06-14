@@ -3,8 +3,6 @@ package sqlitefs
 import (
 	"bytes"
 	"database/sql"
-	"errors"
-	"fmt"
 	"io/fs"
 	"path"
 	"time"
@@ -26,14 +24,6 @@ type SQLiteFS struct {
 	db *sql.DB
 }
 
-// Validate the SQLite connection with a ping
-func (s *SQLiteFS) Validate() error {
-	if s.db == nil {
-		return errors.New("sqlitefs: database is not opened")
-	}
-	return s.db.Ping()
-}
-
 // CaddyModule returns the Caddy module information.
 func (SQLiteFS) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
@@ -42,12 +32,24 @@ func (SQLiteFS) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-func (s *SQLiteFS) Provision(ctx caddy.Context) error {
-	db, err := sql.Open("sqlite3", s.DBPath)
-	if err != nil {
-		return err
+// Idempotently open database, swallowing failures.
+func (s *SQLiteFS) OpenDB() {
+	if s.db != nil {
+		return
 	}
+
+	db, err := sql.Open("sqlite3", s.DBPath+"?_journal=WAL")
+	if err != nil {
+		db.Close()
+		s.db = nil
+		return
+	}
+
 	s.db = db
+}
+
+func (s *SQLiteFS) Provision(ctx caddy.Context) error {
+	s.OpenDB()
 	return nil
 }
 
@@ -58,19 +60,30 @@ func (s SQLiteFS) Cleanup() error {
 	return nil
 }
 
+// stub since Open() handles errors by returning fs.ErrNotExist
+func (s *SQLiteFS) Validate() error {
+	return nil
+}
+
 // Open implements fs.FS.
 func (s SQLiteFS) Open(name string) (fs.File, error) {
-	row := s.db.QueryRow("SELECT content, modified, mode FROM files WHERE name=? LIMIT 1")
+	s.OpenDB()
+	if s.db == nil {
+		return nil, fs.ErrNotExist
+	}
+
+	row := s.db.QueryRow("SELECT content, modified, mode FROM files WHERE name=? AND (expired_at IS NULL OR expired_at > strftime('%s','now')) LIMIT 1", name)
 
 	var content []byte
 	var modified *int64
 	var mode *int32
 	err := row.Scan(&content, &modified, &mode)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fs.ErrNotExist
-	}
 	if err != nil {
-		return nil, fmt.Errorf("querying DB or scanning row: %w", err)
+		if err != sql.ErrNoRows {
+			// database error, invalidate it for next hit
+			s.db = nil
+		}
+		return nil, fs.ErrNotExist
 	}
 
 	f := &sqliteFile{
