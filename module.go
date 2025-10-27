@@ -33,7 +33,7 @@ func (SQLiteFS) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// Idempotently open database, swallowing failures.
+// OpenDB idempotently open database, swallowing failures.
 func (s *SQLiteFS) OpenDB() {
 	if s.db != nil {
 		return
@@ -61,7 +61,7 @@ func (s SQLiteFS) Cleanup() error {
 	return nil
 }
 
-// stub since Open() handles errors by returning fs.ErrNotExist
+// Validate stub since Open() handles errors by returning fs.ErrNotExist
 func (s *SQLiteFS) Validate() error {
 	return nil
 }
