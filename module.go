@@ -3,6 +3,7 @@ package sqlitefs
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"io/fs"
 	"path"
 	"time"
@@ -79,7 +80,7 @@ func (s SQLiteFS) Open(name string) (fs.File, error) {
 	var mode *int32
 	err := row.Scan(&content, &modified, &mode)
 	if err != nil {
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			// database error, invalidate it for next hit
 			s.db = nil
 		}
